@@ -1,0 +1,6 @@
+<resources>
+    <style
+        name="HiddenCameraStyle"
+        parent="@android:style/Theme.NoTitleBar">
+    </style>
+</resources>

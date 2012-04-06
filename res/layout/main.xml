@@ -3,8 +3,8 @@
         xmlns:android="http://schemas.android.com/apk/res/android"
         android:layout_width="fill_parent"
         android:layout_height="fill_parent">
-    <FrameLayout
-            android:id="@+id/FL_preview"
+    <SurfaceView
+            android:id="@+id/SV_preview"
             android:layout_width="fill_parent"
             android:layout_height="fill_parent"/>
     <TextView

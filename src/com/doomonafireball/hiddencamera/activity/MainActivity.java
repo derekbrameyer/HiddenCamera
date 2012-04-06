@@ -1,79 +1,118 @@
 package com.doomonafireball.hiddencamera.activity;
 
+import com.doomonafireball.hiddencamera.R;
+
 import android.app.Activity;
-import android.content.Context;
-import android.content.pm.PackageManager;
 import android.hardware.Camera;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
-import android.widget.Button;
-import android.widget.FrameLayout;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.widget.Toast;
-import com.doomonafireball.hiddencamera.R;
-import com.doomonafireball.hiddencamera.util.Constants;
-import com.doomonafireball.hiddencamera.util.PhotoHandler;
-import com.doomonafireball.hiddencamera.views.CameraSurfaceView;
 
 public class MainActivity extends Activity {
-    private Camera mCamera;
-    private CameraSurfaceView mCameraSurfaceView;
-    private Context mContext;
-    private int mCameraId = 0;
+
+    private SurfaceView preview = null;
+    private SurfaceHolder previewHolder = null;
+    private Camera camera = null;
+    private boolean inPreview = false;
+    private boolean cameraConfigured = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
 
-        mContext = this;
-
-        // Check to see if we have a Camera
-        if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA)) {
-            Toast.makeText(mContext, "No camera on this device.", Toast.LENGTH_SHORT).show();
-        } else {
-            mCameraId = findBackFacingCamera();
-            mCamera = Camera.open(mCameraId);
-            if (mCameraId < 0) {
-                Toast.makeText(mContext, "No back-facing camera found.", Toast.LENGTH_SHORT).show();
-            } else {
-                mCameraSurfaceView = new CameraSurfaceView(this);
-                mCamera = mCameraSurfaceView.getCamera();
-                FrameLayout preview = (FrameLayout) findViewById(R.id.FL_preview);
-                preview.addView(mCameraSurfaceView);
-
-                Button takePicBTN = (Button) findViewById(R.id.BTN_take_picture);
-                takePicBTN.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        mCamera.takePicture(null, null, new PhotoHandler(mContext));
-                    }
-                });
-            }
-        }
-    }
-
-    private int findBackFacingCamera() {
-        int cameraId = -1;
-        int numberOfCameras = Camera.getNumberOfCameras();
-        for (int i = 0; i < numberOfCameras; i++) {
-            Camera.CameraInfo info = new Camera.CameraInfo();
-            Camera.getCameraInfo(i, info);
-            if (info.facing == Camera.CameraInfo.CAMERA_FACING_BACK) {
-                Log.d(Constants.DEBUG_TAG, "Back-facing Camera found.");
-                mCameraId = i;
-                break;
-            }
-        }
-        return cameraId;
+        preview = (SurfaceView) findViewById(R.id.SV_preview);
+        previewHolder = preview.getHolder();
+        previewHolder.addCallback(surfaceCallback);
+        previewHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
     }
 
     @Override
-    protected void onPause() {
+    public void onResume() {
+        super.onResume();
+
+        camera = Camera.open();
+        startPreview();
+    }
+
+    @Override
+    public void onPause() {
+        if (inPreview) {
+            camera.stopPreview();
+        }
+
+        camera.release();
+        camera = null;
+        inPreview = false;
+
         super.onPause();
-        if (mCamera != null) {
-            mCamera.release();
-            mCamera = null;
+    }
+
+    private Camera.Size getBestPreviewSize(int width, int height, Camera.Parameters parameters) {
+        Camera.Size result = null;
+
+        for (Camera.Size size : parameters.getSupportedPreviewSizes()) {
+            if (size.width <= width && size.height <= height) {
+                if (result == null) {
+                    result = size;
+                } else {
+                    int resultArea = result.width * result.height;
+                    int newArea = size.width * size.height;
+
+                    if (newArea > resultArea) {
+                        result = size;
+                    }
+                }
+            }
+        }
+
+        return (result);
+    }
+
+    private void initPreview(int width, int height) {
+        if (camera != null && previewHolder.getSurface() != null) {
+            try {
+                camera.setPreviewDisplay(previewHolder);
+            } catch (Throwable t) {
+                Log.e("PreviewDemo-surfaceCallback",
+                        "Exception in setPreviewDisplay()", t);
+                Toast.makeText(MainActivity.this, t.getMessage(),
+                        Toast.LENGTH_LONG).show();
+            }
+
+            if (!cameraConfigured) {
+                Camera.Parameters parameters = camera.getParameters();
+                Camera.Size size = getBestPreviewSize(width, height, parameters);
+                if (size != null) {
+                    parameters.setPreviewSize(size.width, size.height);
+                    camera.setParameters(parameters);
+                    cameraConfigured = true;
+                }
+            }
         }
     }
+
+    private void startPreview() {
+        if (cameraConfigured && camera != null) {
+            camera.startPreview();
+            inPreview = true;
+        }
+    }
+
+    SurfaceHolder.Callback surfaceCallback = new SurfaceHolder.Callback() {
+        public void surfaceCreated(SurfaceHolder holder) {
+            // no-op -- wait until surfaceChanged()
+        }
+
+        public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+            initPreview(width, height);
+            startPreview();
+        }
+
+        public void surfaceDestroyed(SurfaceHolder holder) {
+            // no-op
+        }
+    };
 }
